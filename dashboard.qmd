@@ -1,0 +1,372 @@
+---
+title: "When Neighbours Play a Role"
+author: "RNA Systems Biology Lab"
+format:
+  dashboard:
+    nav-buttons:
+      - icon: github
+        href: https://github.com/GamaPintoLab/driver_neighbours_dashboard
+        aria-label: GitHub
+---
+
+```{ojs}
+//| output: false
+import { aq, op } from '@uwdata/arquero'
+directory = "data/"
+
+//WCT data
+wct_mutation_burden = aq.loadCSV(directory+"mutation_burden.csv")
+wctresults = FileAttachment("data/wct_results.csv").csv({typed: true})
+wctdrivers = Array.from(new Set(wctresults.map(d => d.driver))).sort()
+wctneighbours = Array.from(
+  new Set(wctresults.filter(d => d.driver === wctdriver).map(d => d.neighbour))
+).sort()
+mutationwct = aq.loadArrow(directory + "drivers/" + wctdriver + ".arrow")
+expressionwct = aq.loadArrow(directory + "neighbours/" + wctneighbour + ".arrow")
+wctplot = mutationwct
+  .join(expressionwct, "patient")
+  .join(wct_mutation_burden, "patient")
+
+//BCT data
+bct_mutation_burden = aq.loadCSV(directory+"bct_mutation_burden.csv")
+bctresults = FileAttachment("data/bct_results.csv").csv({typed: true})
+bctdrivers = Array.from(new Set(bctresults.map(d => d.driver))).sort()
+bctneighbours = Array.from(
+  new Set(bctresults.filter(d => d.driver === bctdriver).map(d => d.neighbour))
+).sort()
+mutationbct = aq.loadArrow(directory + "drivers/" + bctdriver + ".arrow")
+expressionbct = aq.loadArrow(directory + "neighbours/" + bctneighbour + ".arrow")
+
+bctplot = {
+  let array = mutationbct
+    .join(expressionbct, "patient")
+    .groupby("cancer_type")
+    .rollup({
+      frequency: op.sum("frequency"),
+      expression: op.mean("expression")
+    })
+    .join(bct_mutation_burden, "cancer_type");
+  if (mutation_burden) {
+    return array.derive({frequency: d => d.frequency / d.n_samples / d.mutation_burden})
+  } else {
+    return array.derive({frequency: d => d.frequency / d.n_samples})
+  }
+}
+```
+
+# BCT
+
+## Row {height=60%}
+
+### {.sidebar}
+
+```{ojs}
+viewof bctdriver = Inputs.text({
+  label: "Driver",
+  placeholder: "Enter gene symbol...",
+  datalist: bctdrivers,
+  value: "DDX3X",
+  submit: "Search",
+  autocapitalize: "characters",
+})
+viewof bctneighbour = Inputs.select(bctneighbours, {
+  label: "Neighbour",
+  prompt: "Select neighbour",
+  value: "PPIA"
+})
+viewof mutation_burden = Inputs.toggle({label: "corrected mutation frequency"})
+```
+
+### Column
+
+```{ojs}
+//| label: bctscatter
+//| title: "Mutation Frequency vs Neighbour Expression"
+//| padding: 10px
+bctscatter = Plot.plot({
+  marks: [
+    Plot.dot(bctplot, {
+      x: "expression",
+      y: "frequency",
+      stroke: "cancer_type",
+      symbol: "cancer_type",
+      fill: "cancer_type",
+    })
+  ],
+  symbol: {legend: true, label: "Cancer Type"},
+  x: {label: "Expression", labelOffset: 30},
+  y: {label: "Frequency"},
+  height: cards.bctscatter.height,
+  width: cards.bctscatter.width,
+  marginBottom: 70
+})
+```
+
+## Row {height=40%}
+
+### Column {width=25%}
+
+```{ojs}
+//| content: valuebox
+//| title: "spearman rho"
+rho = bctresults
+  .filter(d => d.driver === bctdriver && d.neighbour === bctneighbour)[0]
+  .rho
+  .toFixed(2)
+Number(rho)
+```
+
+### Column {width=25%}
+
+```{ojs}
+//| content: valuebox
+//| title: "p-value"
+pvalue = bctresults
+  .filter(d => d.driver === bctdriver && d.neighbour === bctneighbour)[0]
+  .rho_pval
+  .toFixed(6)
+Number(pvalue)
+```
+
+### Column {.tabset}
+
+```{ojs}
+//| label: mbscatterbct
+//| title: "Mutation Burden vs Expression"
+//| padding: 10px
+Plot.plot({
+  marks: [
+    Plot.dot(bctplot, {
+      x: "expression",
+      y: "mutation_burden",
+      stroke: "cancer_type",
+      symbol: "cancer_type",
+      fill: "cancer_type",
+    })
+  ],
+  symbol: {legend: true, label: "Cancer Type"},
+  x: {label: "Expression", labelOffset: 30},
+  y: {label: "Mutation Burden"},
+  height: cards.mbscatterbct.height,
+  width: cards.mbscatterbct.width,
+  marginBottom: 70
+})
+```
+
+```{ojs}
+//| label: bcttable
+//| title: "BCT Results Table"
+viewof bcttable = Inputs.table(bctresults.filter(d => d.driver === bctdriver), {
+  columns: [
+    "neighbour",
+    "rho",
+    "rho_pval",
+  ],
+  header: {
+    neighbour: "Neighbour",
+    rho: "Spearman Rho",
+    rho_pval: "p-value",
+  },
+  rows: bctneighbours.length,
+  select: false,
+})
+```
+
+# WCT
+
+## Row {height=60%}
+
+### column {width=25%}
+
+```{ojs}
+//| content: valuebox
+//| title: "regression coefficient"
+//| color: secondary
+coef = wctresults
+  .filter(d => d.driver === wctdriver && d.neighbour === wctneighbour)[0]
+  .coef
+  .toFixed(2)
+Number(coef)
+```
+
+```{ojs}
+//| content: valuebox
+//| title: "p-value"
+//| color: secondary
+coefpvalue = wctresults
+  .filter(d => d.driver === wctdriver && d.neighbour === wctneighbour)[0]
+  .coef_p
+  .toFixed(6)
+Number(coefpvalue)
+```
+
+### column {width=75%}
+
+```{ojs}
+//| content: card-toolbar
+viewof wctdriver = Inputs.text({
+  label: "Driver",
+  placeholder: "Enter gene symbol...",
+  datalist: wctdrivers,
+  value: "YWHAE",
+  submit: "Search",
+  autocapitalize: "characters",
+})
+viewof wctneighbour = Inputs.select(wctneighbours, {
+  label: "Neighbour",
+  prompt: "Select neighbour",
+  value: "MAPT"
+})
+```
+
+```{ojs}
+//| label: wctbox
+//| title: "Neighbour Expression by Cancer Type"
+//| padding: 10px
+wctbox = Plot.plot({
+  marks: [
+    Plot.boxY(wctplot, {
+      fx: "cancer_type",
+      x: "mut_status",
+      y: "expression",
+      stroke: "mut_status",
+      fill: "mut_status",
+      fillOpacity: 0.6,
+      strokeWidth: 1.5,
+    })
+  ],
+  color: {legend: true, label: "Mutated"},
+  x: {axis: null, label: null, paddingOuter: 0.2},
+  fx: {padding: 0, label: "Cancer Type", labelOffset: 35, tickRotate: 0, tickSize: 0},
+  y: {label: "Frequency", grid: true},
+  height: cards.wctbox.height,
+  width: cards.wctbox.width,
+  marginBottom: 75,
+})
+```
+
+## Row {height=40%}
+
+### Column {.tabset}
+
+```{ojs}
+//| label: mbscatter
+//| title: "Mutation Burden vs Expression"
+//| padding: 10px
+mbscatter = Plot.plot({
+  marks: [
+    Plot.dot(wctplot, {
+      x: "expression",
+      y: "mutation_burden",
+    })
+  ],
+  x: {label: "Expression"},
+  y: {label: "Mutation Burden"},
+  height: cards.mbscatter.height,
+  width: cards.mbscatter.width,
+})
+```
+
+```{ojs}
+//| label: mbbox
+//| title: "Mutation Burden by Cancer Type"
+//| padding: 10px
+mbbox = Plot.plot({
+  marks: [
+    Plot.boxY(wctplot, {
+      fx: "cancer_type",
+      x: "mut_status",
+      y: "mutation_burden",
+      stroke: "mut_status",
+      fill: "mut_status",
+      fillOpacity: 0.6,
+      strokeWidth: 1.5,
+    })
+  ],
+  color: {legend: true, label: "Mutated"},
+  x: {axis: null, label: null, paddingOuter: 0.2},
+  fx: {padding: 0, label: "Cancer Type", labelOffset: 35, tickRotate: 0, tickSize: 0},
+  y: {label: "Mutation Burden", grid: true},
+  height: cards.mbbox.height,
+  width: cards.mbbox.width,
+  marginBottom: 75,
+})
+```
+
+### Column {width=50%}
+
+```{ojs}
+//| label: wcttable
+//| title: "WCT Results Table"
+viewof wcttable = Inputs.table(wctresults.filter(d => d.driver === wctdriver), {
+  columns: [
+    //"driver",
+    "neighbour",
+    "coef",
+    "coef_p",
+  ],
+  header: {
+    //driver: "Driver",
+    neighbour: "Neighbour",
+    coef: "Regression Coefficient",
+    coef_p: "p-value",
+  },
+  rows: wctneighbours.length,
+  select: false,
+})
+```
+
+# Supplementary Tables
+
+```{ojs}
+//|output: false
+networkstats = FileAttachment("data/network_stats.csv").csv({typed: true})
+cancertypes = FileAttachment("data/cancer_type.csv").csv({typed: true})
+```
+
+## Row {height=50%}
+
+```{ojs}
+//| label: nettable
+//| title: "Network Statistics"
+viewof networktable = Inputs.table(networkstats, {
+  header: {
+    "network": "Network",
+    "n_nodes": "# Nodes",
+    "n_edges": "# Edges",
+    "n_drivers": "# Drivers",
+    "n_neighbours": "# Neighbours",
+    "avg_degree": "Avg Degree",
+    "avg_degree_drivers": "Avg Degree (Drivers)",
+    "avg_degree_neighbours": "Avg Degree (Neighbours)",
+  },
+  layout: "auto",
+  select: false,
+})
+```
+
+## Row {height=50%}
+
+```{ojs}
+//| label: cttable
+//| title: "Cancer Types"
+viewof cttable = Inputs.table(cancertypes, {
+  header: {
+    "cancer_type": "Cancer Type",
+    "n_samples": "# Samples",
+    "mutation_burden": "Mutation Burden",
+  },
+  select: false,
+  rows: wctneighbours.length,
+})
+```
+
+
+
+
+
+
+
+
+
+
