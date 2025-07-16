@@ -1,6 +1,8 @@
 ---
 title: "When Neighbours Play a Role"
 author: "RNA Systems Biology Lab"
+server:
+  type: shiny
 format:
   dashboard:
     nav-buttons:
@@ -11,47 +13,15 @@ format:
 
 ```{ojs}
 //| output: false
-import { aq, op } from '@uwdata/arquero'
-directory = "data/"
-
-//WCT data
-wct_mutation_burden = aq.loadCSV(directory+"mutation_burden.csv")
-wctresults = FileAttachment("data/wct_results.csv").csv({typed: true})
-wctdrivers = Array.from(new Set(wctresults.map(d => d.driver))).sort()
-wctneighbours = Array.from(
-  new Set(wctresults.filter(d => d.driver === wctdriver).map(d => d.neighbour))
-).sort()
-mutationwct = aq.loadArrow(directory + "drivers/" + wctdriver + ".arrow")
-expressionwct = aq.loadArrow(directory + "neighbours/" + wctneighbour + ".arrow")
-wctplot = mutationwct
-  .join(expressionwct, "patient")
-  .join(wct_mutation_burden, "patient")
-
-//BCT data
-bct_mutation_burden = aq.loadCSV(directory+"bct_mutation_burden.csv")
-bctresults = FileAttachment("data/bct_results.csv").csv({typed: true})
-bctdrivers = Array.from(new Set(bctresults.map(d => d.driver))).sort()
+bctdrivers = Array.from(new Set(transpose(bctresults).map(d => d.driver))).sort()
 bctneighbours = Array.from(
-  new Set(bctresults.filter(d => d.driver === bctdriver).map(d => d.neighbour))
+  new Set(transpose(bctresults).filter(d => d.driver === bctdriver).map(d => d.neighbour))
 ).sort()
-mutationbct = aq.loadArrow(directory + "drivers/" + bctdriver + ".arrow")
-expressionbct = aq.loadArrow(directory + "neighbours/" + bctneighbour + ".arrow")
 
-bctplot = {
-  let array = mutationbct
-    .join(expressionbct, "patient")
-    .groupby("cancer_type")
-    .rollup({
-      frequency: op.sum("frequency"),
-      expression: op.mean("expression")
-    })
-    .join(bct_mutation_burden, "cancer_type");
-  if (mutation_burden) {
-    return array.derive({frequency: d => d.frequency / d.n_samples / d.mutation_burden})
-  } else {
-    return array.derive({frequency: d => d.frequency / d.n_samples})
-  }
-}
+wctdrivers = Array.from(new Set(transpose(wctresults).map(d => d.driver))).sort()
+wctneighbours = Array.from(
+  new Set(transpose(wctresults).filter(d => d.driver === wctdriver).map(d => d.neighbour))
+).sort()
 ```
 
 # BCT
@@ -85,7 +55,7 @@ viewof mutation_burden = Inputs.toggle({label: "corrected mutation frequency"})
 //| padding: 10px
 bctscatter = Plot.plot({
   marks: [
-    Plot.dot(bctplot, {
+    Plot.dot(transpose(bctplot), {
       x: "expression",
       y: "frequency",
       stroke: "cancer_type",
@@ -109,7 +79,7 @@ bctscatter = Plot.plot({
 ```{ojs}
 //| content: valuebox
 //| title: "spearman rho"
-rho = bctresults
+rho = transpose(bctresults)
   .filter(d => d.driver === bctdriver && d.neighbour === bctneighbour)[0]
   .rho
   .toFixed(2)
@@ -121,7 +91,7 @@ Number(rho)
 ```{ojs}
 //| content: valuebox
 //| title: "p-value"
-pvalue = bctresults
+pvalue = transpose(bctresults)
   .filter(d => d.driver === bctdriver && d.neighbour === bctneighbour)[0]
   .rho_pval
   .toFixed(6)
@@ -136,7 +106,7 @@ Number(pvalue)
 //| padding: 10px
 Plot.plot({
   marks: [
-    Plot.dot(bctplot, {
+    Plot.dot(transpose(bctplot), {
       x: "expression",
       y: "mutation_burden",
       stroke: "cancer_type",
@@ -156,7 +126,7 @@ Plot.plot({
 ```{ojs}
 //| label: bcttable
 //| title: "BCT Results Table"
-viewof bcttable = Inputs.table(bctresults.filter(d => d.driver === bctdriver), {
+viewof bcttable = Inputs.table(transpose(bctresults).filter(d => d.driver === bctdriver), {
   columns: [
     "neighbour",
     "rho",
@@ -182,7 +152,7 @@ viewof bcttable = Inputs.table(bctresults.filter(d => d.driver === bctdriver), {
 //| content: valuebox
 //| title: "regression coefficient"
 //| color: secondary
-coef = wctresults
+coef = transpose(wctresults)
   .filter(d => d.driver === wctdriver && d.neighbour === wctneighbour)[0]
   .coef
   .toFixed(2)
@@ -193,7 +163,7 @@ Number(coef)
 //| content: valuebox
 //| title: "p-value"
 //| color: secondary
-coefpvalue = wctresults
+coefpvalue = transpose(wctresults)
   .filter(d => d.driver === wctdriver && d.neighbour === wctneighbour)[0]
   .coef_p
   .toFixed(6)
@@ -225,7 +195,7 @@ viewof wctneighbour = Inputs.select(wctneighbours, {
 //| padding: 10px
 wctbox = Plot.plot({
   marks: [
-    Plot.boxY(wctplot, {
+    Plot.boxY(transpose(wctplot), {
       fx: "cancer_type",
       x: "mut_status",
       y: "expression",
@@ -255,7 +225,7 @@ wctbox = Plot.plot({
 //| padding: 10px
 mbscatter = Plot.plot({
   marks: [
-    Plot.dot(wctplot, {
+    Plot.dot(transpose(wctplot), {
       x: "expression",
       y: "mutation_burden",
     })
@@ -273,7 +243,7 @@ mbscatter = Plot.plot({
 //| padding: 10px
 mbbox = Plot.plot({
   marks: [
-    Plot.boxY(wctplot, {
+    Plot.boxY(transpose(wctplot), {
       fx: "cancer_type",
       x: "mut_status",
       y: "mutation_burden",
@@ -298,7 +268,7 @@ mbbox = Plot.plot({
 ```{ojs}
 //| label: wcttable
 //| title: "WCT Results Table"
-viewof wcttable = Inputs.table(wctresults.filter(d => d.driver === wctdriver), {
+viewof wcttable = Inputs.table(transpose(wctresults).filter(d => d.driver === wctdriver), {
   columns: [
     //"driver",
     "neighbour",
@@ -318,18 +288,12 @@ viewof wcttable = Inputs.table(wctresults.filter(d => d.driver === wctdriver), {
 
 # Supplementary Tables
 
-```{ojs}
-//|output: false
-networkstats = FileAttachment("data/network_stats.csv").csv({typed: true})
-cancertypes = FileAttachment("data/cancer_type.csv").csv({typed: true})
-```
-
 ## Row {height=50%}
 
 ```{ojs}
 //| label: nettable
 //| title: "Network Statistics"
-viewof networktable = Inputs.table(networkstats, {
+viewof networktable = Inputs.table(transpose(networkstats), {
   header: {
     "network": "Network",
     "n_nodes": "# Nodes",
@@ -350,7 +314,7 @@ viewof networktable = Inputs.table(networkstats, {
 ```{ojs}
 //| label: cttable
 //| title: "Cancer Types"
-viewof cttable = Inputs.table(cancertypes, {
+viewof cttable = Inputs.table(transpose(cancertypes), {
   header: {
     "cancer_type": "Cancer Type",
     "n_samples": "# Samples",
@@ -361,11 +325,61 @@ viewof cttable = Inputs.table(cancertypes, {
 })
 ```
 
+```{R}
+#| context: setup
+library(tidyverse)
+library(arrow)
 
+bct_mutation_burden <- read_csv("data/bct_mutation_burden.csv")
+wct_mutation_burden <- read_csv("data/mutation_burden.csv")
+bctresults <- read.csv("data/bct_results.csv")
+wctresults <- read.csv("data/wct_results.csv")
+networkstats = read.csv("data/network_stats.csv")
+cancertypes = read.csv("data/cancer_type.csv")
+```
 
+```{r}
+#| output: false
+ojs_define(bctresults, wctresults, networkstats, cancertypes)
+```
 
+```{R}
+#| context: server
+bctplot <- reactive({
+  # req(input$bctdriver)
+  # req(input$bctneighbour)
+  mutationbct <- read_feather(str_c("data/drivers/", input$bctdriver, ".arrow"))
+  expressionbct <- read_feather(str_c("data/neighbours/", input$bctneighbour, ".arrow"))
+  bctplot <- mutationbct %>%
+    inner_join(expressionbct, by = "patient") %>%
+    group_by(cancer_type) %>%
+    summarise(
+      frequency = sum(frequency),
+      expression = mean(expression)
+    ) %>%
+    inner_join(bct_mutation_burden, by = "cancer_type")
+  if (input$mutation_burden) {
+    bctplot <- bctplot %>% mutate(
+      frequency = frequency / n_samples / mutation_burden
+    )
+  } else {
+    bctplot <- bctplot %>% mutate(frequency = frequency / n_samples)
+  }
+  bctplot
+})
 
+wctplot <- reactive({
+  # req(input$wctdriver)
+  # req(input$wctneighbour)
+  mutationwct <- read_feather(str_c("data/drivers/", input$wctdriver, ".arrow"))
+  expressionwct <- read_feather(str_c("data/neighbours/", input$wctneighbour, ".arrow"))
 
+  mutationwct %>%
+    inner_join(expressionwct, by = "patient") %>%
+    inner_join(wct_mutation_burden, by = "patient")
+})
+ojs_define(bctplot, wctplot)
+```
 
 
 
